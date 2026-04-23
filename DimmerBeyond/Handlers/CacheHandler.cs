@@ -17,7 +17,7 @@ namespace DimmerBeyond.Handlers
             }
         }
 
-        public int GetOpacityFromCache()
+        public Dictionary<string, ScreenDimmerSettings> GetScreenSettingsFromCache()
         {
             try
             {
@@ -25,9 +25,9 @@ namespace DimmerBeyond.Handlers
                 {
                     var json = File.ReadAllText(Constants.CacheDataFilePath);
                     var cacheData = JsonSerializer.Deserialize<CacheData>(json);
-                    if (cacheData != null)
+                    if (cacheData?.ScreenSettingsByDeviceName != null)
                     {
-                        return cacheData.OpacityPercent;
+                        return cacheData.ScreenSettingsByDeviceName;
                     }
                 }
             }
@@ -36,16 +36,16 @@ namespace DimmerBeyond.Handlers
                 // Handle exceptions silently and return default
             }
 
-            return (int)(Constants.DefaultOpacity * 100);
+            return new Dictionary<string, ScreenDimmerSettings>();
         }
 
-        public void SaveOpacityToCache(int opacityPercent)
+        public void SaveScreenSettingsToCache(Dictionary<string, ScreenDimmerSettings> screenSettingsByDeviceName)
         {
             try
             {
                 var cacheData = new CacheData
                 {
-                    OpacityPercent = opacityPercent
+                    ScreenSettingsByDeviceName = screenSettingsByDeviceName
                 };
 
                 File.WriteAllText(Constants.CacheDataFilePath, JsonSerializer.Serialize(cacheData, _serializeOptions));

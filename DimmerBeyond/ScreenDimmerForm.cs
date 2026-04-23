@@ -1,4 +1,3 @@
-using DimmerBeyond.Handlers;
 using ScreenDimmer.Handlers;
 
 namespace ScreenDimmer
@@ -6,32 +5,24 @@ namespace ScreenDimmer
     public partial class ScreenDimmerForm : Form
     {
         private readonly OverlayHandler _overlayHandler;
-        private readonly TrayHandler _trayHandler;
-        private readonly CacheHandler _cacheHandler = new();
+        private readonly Screen _screen;
 
-        public ScreenDimmerForm()
+        public ScreenDimmerForm(Screen screen, int cachedOpacityPercent)
         {
             InitializeComponent();
-            var cachedOpacityPercent = _cacheHandler.GetOpacityFromCache();
+            _screen = screen;
             _overlayHandler = new OverlayHandler(cachedOpacityPercent);
-            _trayHandler = new TrayHandler(OnOpacityChanged, UpdateOpacityPercentCache, cachedOpacityPercent);
-
             InitializeApp();
         }
 
         private void InitializeApp()
         {
-            _overlayHandler.ConfigureOverlayForm(this);
+            _overlayHandler.ConfigureOverlayForm(this, _screen);
         }
 
-        private void OnOpacityChanged(double opacity)
+        public void SetOpacity(double opacity)
         {
             _overlayHandler.SetOpacity(opacity);
-        }
-
-        private void UpdateOpacityPercentCache(int opacityPercent)
-        {
-            _cacheHandler.SaveOpacityToCache(opacityPercent);
         }
 
         protected override void OnShown(EventArgs e)
