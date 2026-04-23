@@ -14,6 +14,7 @@ namespace ScreenDimmer.Handlers
         private readonly Dictionary<string, TrackBar> _trackBarsByScreen = new();
         private readonly Dictionary<string, Label> _labelsByScreen = new();
         private readonly IReadOnlyList<Screen> _screens;
+        private bool _hasPendingChanges;
 
         public TrayHandler(
             IReadOnlyList<Screen> screens,
@@ -132,6 +133,12 @@ namespace ScreenDimmer.Handlers
                 return;
             }
 
+            if (_screenSettingsByDeviceName[screenKey].OpacityPercent != trackBar.Value)
+            {
+                _screenSettingsByDeviceName[screenKey].OpacityPercent = trackBar.Value;
+                _hasPendingChanges = true;
+            }
+
             if (_opacityEnabledByScreen[screenKey])
             {
                 SetOpacity(screenKey, trackBar.Value);
@@ -148,6 +155,11 @@ namespace ScreenDimmer.Handlers
             }
 
             _opacityEnabledByScreen[screenKey] = checkBox.Checked;
+            if (_screenSettingsByDeviceName[screenKey].Enabled != checkBox.Checked)
+            {
+                _screenSettingsByDeviceName[screenKey].Enabled = checkBox.Checked;
+                _hasPendingChanges = true;
+            }
             _trackBarsByScreen[screenKey].Enabled = checkBox.Checked;
 
             if (checkBox.Checked)
@@ -178,29 +190,10 @@ namespace ScreenDimmer.Handlers
 
         private void ContextMenu_Closed(object? sender, ToolStripDropDownClosedEventArgs e)
         {
-            bool hasChanges = false;
-
-            foreach (var entry in _trackBarsByScreen)
-            {
-                var screenKey = entry.Key;
-                var opacityValue = entry.Value.Value;
-                if (_screenSettingsByDeviceName[screenKey].OpacityPercent != opacityValue)
-                {
-                    _screenSettingsByDeviceName[screenKey].OpacityPercent = opacityValue;
-                    hasChanges = true;
-                }
-
-                var opacityEnabled = _opacityEnabledByScreen[screenKey];
-                if (_screenSettingsByDeviceName[screenKey].Enabled != opacityEnabled)
-                {
-                    _screenSettingsByDeviceName[screenKey].Enabled = opacityEnabled;
-                    hasChanges = true;
-                }
-            }
-
-            if (hasChanges)
+            if (_hasPendingChanges)
             {
                 _updateScreenSettingsCache(_screenSettingsByDeviceName);
+                _hasPendingChanges = false;
             }
         }
 
