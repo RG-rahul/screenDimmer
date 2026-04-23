@@ -1,5 +1,5 @@
-using DimmerBeyond.Handlers;
 using System.Reflection;
+using DimmerBeyond.Records;
 
 namespace ScreenDimmer.Handlers
 {
@@ -7,42 +7,64 @@ namespace ScreenDimmer.Handlers
     {
         private NotifyIcon _notifyIcon = new();
         private ContextMenuStrip _contextMenu = new();
-        private TrackBar _opacityTrackBar = new();
-        private ToolStripControlHost? _trackBarHost;
-        private readonly Action<double> _onOpacityChanged;
-        private readonly Action<int> _updateOpacityPercentCache;
-        private int _cachedOpacityPercent;
-        private readonly CacheHandler _cacheHandler = new();
-        private bool _opacityEnabled = true;
+        private readonly Action<string, double> _onOpacityChanged;
+        private readonly Action<Dictionary<string, ScreenDimmerSettings>> _updateScreenSettingsCache;
+        private readonly Dictionary<string, ScreenDimmerSettings> _screenSettingsByDeviceName;
+        private readonly Dictionary<string, bool> _opacityEnabledByScreen = new();
+        private readonly Dictionary<string, TrackBar> _trackBarsByScreen = new();
+        private readonly Dictionary<string, Label> _labelsByScreen = new();
+        private readonly IReadOnlyList<Screen> _screens;
 
-        public TrayHandler(Action<double> onOpacityChanged, Action<int> updateOpacityPercentCache, int cachedOpacityPercent)
+        public TrayHandler(
+            IReadOnlyList<Screen> screens,
+            Action<string, double> onOpacityChanged,
+            Action<Dictionary<string, ScreenDimmerSettings>> updateScreenSettingsCache,
+            Dictionary<string, ScreenDimmerSettings> screenSettingsByDeviceName)
         {
+            _screens = screens;
             _onOpacityChanged = onOpacityChanged;
-            _updateOpacityPercentCache = updateOpacityPercentCache;
-            _cachedOpacityPercent = cachedOpacityPercent;
+            _updateScreenSettingsCache = updateScreenSettingsCache;
+            _screenSettingsByDeviceName = screenSettingsByDeviceName;
             InitializeTrayIcon();
         }
 
         private void InitializeTrayIcon()
         {
-            // Create the trackbar for opacity control
-            _opacityTrackBar = new TrackBar
-            {
-                Minimum = 0,
-                Maximum = 80,
-                Value = _cachedOpacityPercent,
-                TickStyle = TickStyle.None,
-                Width = 150,
-                Height = 30
-            };
-            _opacityTrackBar.ValueChanged += OnOpacityTrackBarValueChanged;
-
-            // Create context menu
             _contextMenu = new ContextMenuStrip();
             _contextMenu.AutoClose = true;
             _contextMenu.Closed += ContextMenu_Closed;
 
-            // Add checkbox and label for opacity
+            for (int i = 0; i < _screens.Count; i++)
+            {
+                AddScreenControls(_screens[i], i + 1);
+            }
+
+            _contextMenu.Items.Add(new ToolStripSeparator());
+            var exitItem = new ToolStripMenuItem("Exit", null, OnExitClick);
+            _contextMenu.Items.Add(exitItem);
+
+            _notifyIcon = new NotifyIcon
+            {
+                Icon = CreateTrayIcon(),
+                ContextMenuStrip = _contextMenu,
+                Visible = true
+            };
+
+            _notifyIcon.MouseClick += OnTrayIconMouseClick;
+        }
+
+        private void AddScreenControls(Screen screen, int displayIndex)
+        {
+            var screenKey = screen.DeviceName;
+            var displayName = $"Display {displayIndex}";
+            var opacityValue = _screenSettingsByDeviceName[screenKey].OpacityPercent;
+            var opacityEnabled = _screenSettingsByDeviceName[screenKey].Enabled;
+
+            var displayHeaderItem = new ToolStripMenuItem(displayName)
+            {
+                Enabled = false
+            };
+
             var opacityPanel = new FlowLayoutPanel
             {
                 FlowDirection = FlowDirection.LeftToRight,
@@ -53,43 +75,47 @@ namespace ScreenDimmer.Handlers
 
             var opacityCheckBox = new CheckBox
             {
-                Checked = true,
+                Checked = opacityEnabled,
                 Margin = new Padding(0, 0, 4, 0),
                 AutoSize = true,
+                Tag = screenKey
             };
             opacityCheckBox.CheckedChanged += OnOpacityCheckBoxChanged;
+            _opacityEnabledByScreen[screenKey] = opacityEnabled;
 
             var opacityLabel = new Label
             {
-                Text = $"Opacity: {_cachedOpacityPercent}%",
+                Text = $"Opacity: {opacityValue}%",
                 AutoSize = true,
                 TextAlign = ContentAlignment.MiddleLeft
             };
+            _labelsByScreen[screenKey] = opacityLabel;
 
             opacityPanel.Controls.Add(opacityCheckBox);
             opacityPanel.Controls.Add(opacityLabel);
-
             var opacityHost = new ToolStripControlHost(opacityPanel);
-            _contextMenu.Items.Add(opacityHost);
 
-            // Add trackbar to context menu
-            _trackBarHost = new ToolStripControlHost(_opacityTrackBar);
-            _contextMenu.Items.Add(_trackBarHost);
-
-            // Add separator and exit option
-            _contextMenu.Items.Add(new ToolStripSeparator());
-            var exitItem = new ToolStripMenuItem("Exit", null, OnExitClick);
-            _contextMenu.Items.Add(exitItem);
-
-            // Create notify icon
-            _notifyIcon = new NotifyIcon
+            var opacityTrackBar = new TrackBar
             {
-                Icon = CreateTrayIcon(),
-                ContextMenuStrip = _contextMenu,
-                Visible = true
+                Minimum = 0,
+                Maximum = 80,
+                Value = opacityValue,
+                TickStyle = TickStyle.None,
+                Width = 150,
+                AutoSize = false,
+                Height = 22,
+                Tag = screenKey
             };
+            opacityTrackBar.ValueChanged += OnOpacityTrackBarValueChanged;
+            _trackBarsByScreen[screenKey] = opacityTrackBar;
+            opacityTrackBar.Enabled = opacityEnabled;
 
-            _notifyIcon.MouseClick += OnTrayIconMouseClick;
+            var trackBarHost = new ToolStripControlHost(opacityTrackBar);
+
+            _contextMenu.Items.Add(displayHeaderItem);
+            _contextMenu.Items.Add(opacityHost);
+            _contextMenu.Items.Add(trackBarHost);
+            _contextMenu.Items.Add(new ToolStripSeparator());
         }
 
         private Icon CreateTrayIcon()
@@ -101,39 +127,43 @@ namespace ScreenDimmer.Handlers
 
         private void OnOpacityTrackBarValueChanged(object? sender, EventArgs e)
         {
-            // Only update opacity if enabled
-            if (_opacityEnabled)
+            if (sender is not TrackBar trackBar || trackBar.Tag is not string screenKey)
             {
-                SetOpacity(_opacityTrackBar.Value);
+                return;
             }
 
-            // Update the label text
-            var opacityHost = (ToolStripControlHost)_contextMenu.Items[0];
-            var panel = (FlowLayoutPanel)opacityHost.Control;
-            var label = (Label)panel.Controls[1];
-            label.Text = $"Opacity: {_opacityTrackBar.Value}%";
+            if (_opacityEnabledByScreen[screenKey])
+            {
+                SetOpacity(screenKey, trackBar.Value);
+            }
+
+            _labelsByScreen[screenKey].Text = $"Opacity: {trackBar.Value}%";
         }
 
         private void OnOpacityCheckBoxChanged(object? sender, EventArgs e)
         {
-            var checkBox = sender as CheckBox;
-            _opacityEnabled = checkBox?.Checked ?? true;
-            _opacityTrackBar.Enabled = _opacityEnabled;
-
-            if (_opacityEnabled)
+            if (sender is not CheckBox checkBox || checkBox.Tag is not string screenKey)
             {
-                SetOpacity(_opacityTrackBar.Value);
+                return;
+            }
+
+            _opacityEnabledByScreen[screenKey] = checkBox.Checked;
+            _trackBarsByScreen[screenKey].Enabled = checkBox.Checked;
+
+            if (checkBox.Checked)
+            {
+                SetOpacity(screenKey, _trackBarsByScreen[screenKey].Value);
             }
             else
             {
-                SetOpacity(0);
+                SetOpacity(screenKey, 0);
             }
         }
 
-        private void SetOpacity(int value)
+        private void SetOpacity(string screenKey, int value)
         {
             double opacity = value / 100.0;
-            _onOpacityChanged(opacity);
+            _onOpacityChanged(screenKey, opacity);
         }
 
         private void OnTrayIconMouseClick(object? sender, MouseEventArgs e)
@@ -148,10 +178,29 @@ namespace ScreenDimmer.Handlers
 
         private void ContextMenu_Closed(object? sender, ToolStripDropDownClosedEventArgs e)
         {
-            if (_cachedOpacityPercent != _opacityTrackBar.Value)
+            bool hasChanges = false;
+
+            foreach (var entry in _trackBarsByScreen)
             {
-                _cachedOpacityPercent = _opacityTrackBar.Value;
-                _updateOpacityPercentCache(_cachedOpacityPercent);
+                var screenKey = entry.Key;
+                var opacityValue = entry.Value.Value;
+                if (_screenSettingsByDeviceName[screenKey].OpacityPercent != opacityValue)
+                {
+                    _screenSettingsByDeviceName[screenKey].OpacityPercent = opacityValue;
+                    hasChanges = true;
+                }
+
+                var opacityEnabled = _opacityEnabledByScreen[screenKey];
+                if (_screenSettingsByDeviceName[screenKey].Enabled != opacityEnabled)
+                {
+                    _screenSettingsByDeviceName[screenKey].Enabled = opacityEnabled;
+                    hasChanges = true;
+                }
+            }
+
+            if (hasChanges)
+            {
+                _updateScreenSettingsCache(_screenSettingsByDeviceName);
             }
         }
 
@@ -164,12 +213,15 @@ namespace ScreenDimmer.Handlers
         {
             _notifyIcon?.Dispose();
             _contextMenu?.Dispose();
-            _opacityTrackBar?.Dispose();
             if (_contextMenu != null)
             {
                 _contextMenu.Closed -= ContextMenu_Closed;
             }
-           
+
+            foreach (var trackBar in _trackBarsByScreen.Values)
+            {
+                trackBar.Dispose();
+            }
         }
     }
 }

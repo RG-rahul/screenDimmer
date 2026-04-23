@@ -16,7 +16,6 @@
             if (disposing && (components != null))
             {
                 components.Dispose();
-                _trayHandler?.Dispose();
             }
             base.Dispose(disposing);
         }

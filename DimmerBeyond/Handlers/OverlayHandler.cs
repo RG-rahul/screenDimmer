@@ -31,11 +31,12 @@ namespace ScreenDimmer.Handlers
             SetWindowLong(handle, GWL_EXSTYLE, (IntPtr)exStyle);
         }
 
-        public void ConfigureOverlayForm(Form form)
+        public void ConfigureOverlayForm(Form form, Screen screen)
         {
             _overlayForm = form;
             form.FormBorderStyle = FormBorderStyle.None;
-            form.WindowState = FormWindowState.Maximized;
+            form.StartPosition = FormStartPosition.Manual;
+            form.Bounds = screen.Bounds;
             form.TopMost = true;
             form.BackColor = Color.Black;
             form.Opacity = _cachedOpacityPercent / 100.0;

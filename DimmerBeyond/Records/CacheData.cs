@@ -2,6 +2,6 @@
 {
     internal class CacheData
     {
-        public int OpacityPercent { get; set; } = (int)Constants.DefaultOpacity * 100;
+        public Dictionary<string, ScreenDimmerSettings>? ScreenSettingsByDeviceName { get; set; }
     }
 }
