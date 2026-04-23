@@ -10,6 +10,8 @@
 	<Product>RGsScreenDimmer</Product>
 	<Title>DimmerBeyond</Title>
 	<Copyright>Copyright © Rahul-Gupta 2025</Copyright>
+	<AssemblyVersion>1.0.9609.0</AssemblyVersion>
+	<FileVersion>1.0.9609.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
