@@ -81,3 +81,7 @@ dotnet publish -c Release -r win-x86 --self-contained false
 
 - If settings do not seem updated, close the tray menu once after changes to force persistence.
 - If monitor arrangement changes, wait briefly for Windows to raise display update events and for UI refresh to complete.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
